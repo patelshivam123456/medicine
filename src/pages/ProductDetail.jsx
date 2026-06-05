@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { dummyProducts, dummyReviews } from '../data/dummy';
 import ProductCard from '../components/products/ProductCard';
 import Modal from '../components/common/Modal.jsx';
+import LoadingButton from '../components/common/LoadingButton.jsx';
 import { useAuthStore, useCartStore, useWishlistStore } from '../store/index.js';
 import { useToast } from '../components/common/Toast';
 import {
@@ -36,6 +37,7 @@ const ProductDetail = () => {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [loginPromptType, setLoginPromptType] = useState('review');
+  const [loadingAction, setLoadingAction] = useState('');
   const { items, addToCart } = useCartStore();
   const { isLoggedIn } = useAuthStore();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlistStore();
@@ -72,36 +74,50 @@ const ProductDetail = () => {
   };
 
   const handleAddToCart = () => {
+    setLoadingAction('cart');
     if (cartQuantity > 0) {
-      navigate('/cart');
+      window.setTimeout(() => {
+        navigate('/cart');
+      }, 300);
       return;
     }
 
-    addToCart(product, quantity);
-    addToast(`${product.name} added to cart!`, 'success');
+    window.setTimeout(() => {
+      addToCart(product, quantity);
+      setLoadingAction('');
+      addToast(`${product.name} added to cart!`, 'success');
+    }, 300);
   };
 
   const handleBuyNow = () => {
+    setLoadingAction('buy-now');
     localStorage.setItem('buy_now_items', JSON.stringify([{ ...product, quantity }]));
 
     if (!isLoggedIn) {
+      setLoadingAction('');
       setLoginPromptType('buy-now');
       setShowLoginPrompt(true);
       return;
     }
 
-    addToast(`${product.name} is ready for checkout`, 'success');
-    navigate('/checkout?buyNow=1');
+    window.setTimeout(() => {
+      addToast(`${product.name} is ready for checkout`, 'success');
+      navigate('/checkout?buyNow=1');
+    }, 400);
   };
 
   const handleWishlist = () => {
-    if (inWishlist) {
-      removeFromWishlist(product.id);
-      addToast('Removed from wishlist', 'info');
-    } else {
-      addToWishlist(product);
-      addToast('Added to wishlist', 'success');
-    }
+    setLoadingAction('wishlist');
+    window.setTimeout(() => {
+      if (inWishlist) {
+        removeFromWishlist(product.id);
+        addToast('Removed from wishlist', 'info');
+      } else {
+        addToWishlist(product);
+        addToast('Added to wishlist', 'success');
+      }
+      setLoadingAction('');
+    }, 300);
   };
 
   const handleSubmitReview = (event) => {
@@ -111,21 +127,25 @@ const ProductDetail = () => {
       return;
     }
 
-    setNewReviews(prev => [
-      ...prev,
-      {
-        id: Date.now(),
-        productId: product.id,
-        rating: Number(reviewForm.rating),
-        title: reviewForm.title.trim(),
-        content: reviewForm.content.trim(),
-        helpfulCount: 0,
-      },
-    ]);
-    setReviewForm({ rating: 5, title: '', content: '' });
-    setActiveTab('reviews');
-    setShowReviewModal(false);
-    addToast('Review added successfully', 'success');
+    setLoadingAction('review');
+    window.setTimeout(() => {
+      setNewReviews(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          productId: product.id,
+          rating: Number(reviewForm.rating),
+          title: reviewForm.title.trim(),
+          content: reviewForm.content.trim(),
+          helpfulCount: 0,
+        },
+      ]);
+      setReviewForm({ rating: 5, title: '', content: '' });
+      setActiveTab('reviews');
+      setShowReviewModal(false);
+      setLoadingAction('');
+      addToast('Review added successfully', 'success');
+    }, 500);
   };
 
   const handleOpenReview = () => {
@@ -313,25 +333,30 @@ const ProductDetail = () => {
 
               {/* Action Buttons */}
               <div className="mb-6 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_3rem] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_3.5rem] sm:gap-3">
-                <button
+                <LoadingButton
                   onClick={handleAddToCart}
                   disabled={product.stock === 0}
+                  isLoading={loadingAction === 'cart'}
+                  loadingText={cartQuantity > 0 ? 'Opening cart...' : 'Adding...'}
+                  icon={ShoppingCart}
                   className="btn-primary flex min-h-12 items-center justify-center gap-2 whitespace-nowrap px-4 py-3 text-sm disabled:opacity-50 sm:text-base"
                 >
-                  <ShoppingCart size={20} />
                   {cartQuantity > 0 ? 'Go to Cart' : 'Add to Cart'}
-                </button>
-                <button
+                </LoadingButton>
+                <LoadingButton
                   type="button"
                   onClick={handleBuyNow}
                   disabled={product.stock === 0}
+                  isLoading={loadingAction === 'buy-now'}
+                  loadingText="Preparing..."
+                  icon={LockKeyhole}
                   className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-yellow-400 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-yellow-300 disabled:opacity-50 sm:text-base"
                 >
-                  <LockKeyhole size={20} />
                   Buy Now
-                </button>
+                </LoadingButton>
                 <button
                   onClick={handleWishlist}
+                  disabled={loadingAction === 'wishlist'}
                   className={`grid h-12 w-12 shrink-0 place-items-center rounded-lg border transition sm:w-14 ${
                     inWishlist
                       ? 'bg-rose-50 border-rose-500 text-rose-600'
@@ -559,10 +584,15 @@ const ProductDetail = () => {
             />
           </div>
 
-          <button type="submit" className="btn-primary inline-flex w-full items-center justify-center gap-2 py-3">
-            <MessageSquarePlus size={18} />
+          <LoadingButton
+            type="submit"
+            isLoading={loadingAction === 'review'}
+            loadingText="Submitting..."
+            icon={MessageSquarePlus}
+            className="btn-primary inline-flex w-full items-center justify-center gap-2 py-3"
+          >
             Submit Review
-          </button>
+          </LoadingButton>
         </form>
       </Modal>
 

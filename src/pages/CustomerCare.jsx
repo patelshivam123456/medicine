@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Copy, FileText, Headphones, LockKeyhole, Mail, MapPin, MessageCircle, PackageCheck, Phone, Search, Send, ShieldCheck, Truck, UserPlus } from 'lucide-react';
 import { useToast } from '../components/common/Toast';
 import Modal from '../components/common/Modal.jsx';
+import LoadingButton from '../components/common/LoadingButton.jsx';
 import { useAuthStore } from '../store/index.js';
+import { buildAreaLabel, LOCATION_CHANGE_EVENT, readStoredLocationLabel, reverseGeocode, saveLocationLabel } from '../utils/location.js';
 
 const helpTopics = [
   { title: 'Order status', desc: 'Track delivery, returns, and replacement updates.', icon: PackageCheck },
@@ -57,7 +59,9 @@ const CustomerCare = () => {
   const [chatLog, setChatLog] = useState([
     { id: 1, from: 'care', text: 'Hi, I am here to help with orders, delivery, prescriptions, and refunds.' },
   ]);
-  const [location, setLocation] = useState('Not selected');
+  const [location, setLocation] = useState(readStoredLocationLabel);
+  const [isSendingChat, setIsSendingChat] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
   const visibleIssues = useMemo(() => {
@@ -68,6 +72,21 @@ const CustomerCare = () => {
       return matchesTopic && matchesSearch;
     });
   }, [activeTopic, query]);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setLocation('Current location');
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    const handleLocationChange = (event) => {
+      setLocation(event.detail || readStoredLocationLabel());
+    };
+
+    window.addEventListener(LOCATION_CHANGE_EVENT, handleLocationChange);
+    return () => window.removeEventListener(LOCATION_CHANGE_EVENT, handleLocationChange);
+  }, []);
 
   const handleCopy = async (text, label) => {
     try {
@@ -89,15 +108,30 @@ const CustomerCare = () => {
       return;
     }
 
+    setIsLocating(true);
     setLocation('Detecting...');
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        const nextLocation = `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`;
-        setLocation(nextLocation);
-        addToast('Service location updated', 'success');
+      async ({ coords }) => {
+        const latitude = coords.latitude.toFixed(5);
+        const longitude = coords.longitude.toFixed(5);
+
+        try {
+          const locationData = await reverseGeocode(latitude, longitude);
+          const nextLocation = buildAreaLabel(locationData) || 'Detected nearby area';
+          setLocation(nextLocation);
+          saveLocationLabel(nextLocation);
+          addToast('Service area updated', 'success');
+        } catch {
+          setLocation('Detected nearby area');
+          saveLocationLabel('Detected nearby area');
+          addToast('Service area detected. Exact address may need confirmation.', 'warning');
+        } finally {
+          setIsLocating(false);
+        }
       },
       () => {
         setLocation('Permission needed');
+        setIsLocating(false);
         addToast('Allow location access to update service location', 'warning');
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
@@ -109,13 +143,17 @@ const CustomerCare = () => {
     const message = chatMessage.trim();
     if (!message) return;
 
-    setChatLog(prev => [
-      ...prev,
-      { id: Date.now(), from: 'you', text: message },
-      { id: Date.now() + 1, from: 'care', text: 'Thanks. A support specialist will review this and respond shortly.' },
-    ]);
-    setChatMessage('');
-    setChatOpen(true);
+    setIsSendingChat(true);
+    window.setTimeout(() => {
+      setChatLog(prev => [
+        ...prev,
+        { id: Date.now(), from: 'you', text: message },
+        { id: Date.now() + 1, from: 'care', text: 'Thanks. A support specialist will review this and respond shortly.' },
+      ]);
+      setChatMessage('');
+      setChatOpen(true);
+      setIsSendingChat(false);
+    }, 400);
   };
 
   const goToAuth = (path) => {
@@ -274,9 +312,15 @@ const CustomerCare = () => {
               <MapPin size={20} className="mt-0.5 shrink-0 text-teal-700" />
               <p>{location}</p>
             </div>
-            <button onClick={handleLocation} className="mt-4 w-full border border-teal-700 px-4 py-2 text-sm font-bold text-teal-700 hover:bg-teal-50">
+            <LoadingButton
+              onClick={handleLocation}
+              isLoading={isLocating}
+              loadingText="Detecting..."
+              icon={MapPin}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 border border-teal-700 px-4 py-2 text-sm font-bold text-teal-700 hover:bg-teal-50"
+            >
               Use current location
-            </button>
+            </LoadingButton>
           </div>
         </aside>
       </div>
@@ -299,9 +343,15 @@ const CustomerCare = () => {
           </div>
           <form onSubmit={sendChatMessage} className="flex gap-2 border-t border-slate-100 p-3">
             <input value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="Type your message" className="min-w-0 flex-1 border border-slate-200 px-3 py-2 text-sm outline-none focus:border-teal-600" />
-            <button type="submit" className="grid h-10 w-10 place-items-center bg-teal-700 text-white hover:bg-teal-800" aria-label="Send chat message">
+            <LoadingButton
+              type="submit"
+              isLoading={isSendingChat}
+              loadingText=""
+              className="grid h-10 w-10 place-items-center bg-teal-700 text-white hover:bg-teal-800"
+              aria-label="Send chat message"
+            >
               <Send size={17} />
-            </button>
+            </LoadingButton>
           </form>
         </div>
       )}

@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, ChevronDown, LocateFixed, MapPin, Navigation, PackageCheck, PlusCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, LocateFixed, LockKeyhole, MapPin, Navigation, PackageCheck, PlusCircle } from 'lucide-react';
 import { useCartStore, useAuthStore, usePreferencesStore, useOrdersStore } from '../store/index.js';
 import { useToast } from '../components/common/Toast';
+import LoadingButton from '../components/common/LoadingButton.jsx';
+import Modal from '../components/common/Modal.jsx';
 import { validateMobile, validatePincode, generateOrderNumber, calculateSubtotal, calculateDeliveryCharges, formatCurrency } from '../utils/helpers.js';
+import { buildAreaLabel, readStoredLocationLabel, reverseGeocode, saveLocationLabel } from '../utils/location.js';
 
 const createBlankAddress = (user) => ({
   fullName: user?.name || '',
-  mobile: '',
+  mobile: user?.mobile || '',
   houseNumber: '',
   area: '',
   landmark: 'Pinned from device location',
@@ -46,7 +49,8 @@ const Checkout = () => {
   const { createOrder } = useOrdersStore();
   const { addToast } = useToast();
   const [isLocating, setIsLocating] = useState(false);
-  const [mapLocation, setMapLocation] = useState({ lat: '28.58680', lng: '77.20796' });
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [mapLocationLabel, setMapLocationLabel] = useState(readStoredLocationLabel);
   const [address, setAddress] = useState(() => getPreferredAddress(user, savedAddresses, selectedAddress));
   const [buyNowItems] = useState(() => JSON.parse(localStorage.getItem('buy_now_items')) || []);
   const [isAddressDropdownOpen, setIsAddressDropdownOpen] = useState(false);
@@ -91,9 +95,38 @@ const Checkout = () => {
     return (
       <div className="mx-auto max-w-7xl px-4 py-12 text-center">
         <p className="mb-4 text-xl text-slate-600">Please login to checkout</p>
-        <button onClick={() => navigate(`/login?redirect=${encodeURIComponent(isBuyNowCheckout ? '/checkout?buyNow=1' : '/checkout')}`)} className="btn-primary">
-          Login
-        </button>
+        <Modal
+          isOpen
+          onClose={() => navigate(`/login?redirect=${encodeURIComponent(isBuyNowCheckout ? '/checkout?buyNow=1' : '/checkout')}`)}
+          title="Login to continue checkout"
+        >
+          <div className="text-center">
+            <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full bg-teal-50 text-teal-700">
+              <LockKeyhole size={28} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-950">Please login first</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Login to use your delivery address and complete checkout.
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => navigate(`/login?redirect=${encodeURIComponent(isBuyNowCheckout ? '/checkout?buyNow=1' : '/checkout')}`)}
+                className="btn-primary inline-flex items-center justify-center gap-2 py-3"
+              >
+                <LockKeyhole size={18} />
+                Login
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/register?redirect=${encodeURIComponent(isBuyNowCheckout ? '/checkout?buyNow=1' : '/checkout')}`)}
+                className="btn-outline inline-flex items-center justify-center gap-2 py-3"
+              >
+                Create Account
+              </button>
+            </div>
+          </div>
+        </Modal>
       </div>
     );
   }
@@ -112,6 +145,7 @@ const Checkout = () => {
       ...savedAddress,
     };
     setAddress(nextAddress);
+    setMapLocationLabel([savedAddress.area, savedAddress.city, savedAddress.state].filter(Boolean).join(', ') || 'Saved address');
     setSelectedAddress(savedAddress);
     setIsAddressDropdownOpen(false);
     addToast('Saved address selected', 'success');
@@ -119,6 +153,7 @@ const Checkout = () => {
 
   const handleAddNewAddress = () => {
     setAddress(createBlankAddress(user));
+    setMapLocationLabel('New address');
     setIsAddressDropdownOpen(false);
     addToast('Add a new delivery address', 'info');
   };
@@ -131,19 +166,41 @@ const Checkout = () => {
 
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setMapLocation({
-          lat: coords.latitude.toFixed(5),
-          lng: coords.longitude.toFixed(5),
-        });
-        setAddress(prev => ({
-          ...prev,
-          area: prev.area || 'Current map location',
-          city: prev.city || 'Detected nearby area',
-          landmark: prev.landmark || 'Pinned from device location',
-        }));
-        setIsLocating(false);
-        addToast('Current location pinned on map', 'success');
+      async ({ coords }) => {
+        const latitude = coords.latitude.toFixed(5);
+        const longitude = coords.longitude.toFixed(5);
+
+        try {
+          const locationData = await reverseGeocode(latitude, longitude);
+          const areaLabel = buildAreaLabel(locationData) || 'Detected nearby area';
+          const city = locationData.city || locationData.locality || '';
+          const state = locationData.principalSubdivision || '';
+          const pincode = locationData.postcode || '';
+
+          setMapLocationLabel(areaLabel);
+          saveLocationLabel(areaLabel);
+          setAddress(prev => ({
+            ...prev,
+            area: areaLabel,
+            city: city || prev.city || areaLabel,
+            state: state || prev.state,
+            pincode: pincode || prev.pincode,
+            landmark: prev.landmark || 'Pinned from device location',
+          }));
+          addToast('Current location area added', 'success');
+        } catch {
+          setMapLocationLabel('Detected nearby area');
+          saveLocationLabel('Detected nearby area');
+          setAddress(prev => ({
+            ...prev,
+            area: prev.area || 'Detected nearby area',
+            city: prev.city || 'Detected nearby area',
+            landmark: prev.landmark || 'Pinned from device location',
+          }));
+          addToast('Current location pinned. Add city and PIN manually.', 'warning');
+        } finally {
+          setIsLocating(false);
+        }
       },
       () => {
         setIsLocating(false);
@@ -159,37 +216,40 @@ const Checkout = () => {
       return;
     }
 
-    const orderAddress = { ...address };
-    const savedAddress = savedAddresses.find(savedAddress => (
-      savedAddress.id === orderAddress.id || isSameAddress(savedAddress, orderAddress)
-    ));
+    setIsPlacingOrder(true);
+    window.setTimeout(() => {
+      const orderAddress = { ...address };
+      const savedAddress = savedAddresses.find(savedAddress => (
+        savedAddress.id === orderAddress.id || isSameAddress(savedAddress, orderAddress)
+      ));
 
-    if (!savedAddress) {
-      addAddress(orderAddress);
-    }
-    setSelectedAddress(savedAddress || orderAddress);
+      if (!savedAddress) {
+        addAddress(orderAddress);
+      }
+      setSelectedAddress(savedAddress || orderAddress);
 
-    createOrder({
-      orderNumber: generateOrderNumber(),
-      items: checkoutItems,
-      deliveryAddress: `${address.houseNumber}, ${address.area}, ${address.city}, ${address.state} ${address.pincode}`,
-      deliverySlot: 'Standard delivery',
-      paymentMethod: 'Pay on delivery',
-      subtotal,
-      discount: discountAmount,
-      couponCode: appliedCoupon?.code || null,
-      gst: 0,
-      delivery,
-      totalAmount: total,
-    });
-    if (isBuyNowCheckout) {
-      localStorage.removeItem('buy_now_items');
-    } else {
-      clearCart();
-      removeCoupon();
-    }
-    addToast('Order placed successfully!', 'success');
-    navigate('/track-order');
+      createOrder({
+        orderNumber: generateOrderNumber(),
+        items: checkoutItems,
+        deliveryAddress: `${address.houseNumber}, ${address.area}, ${address.city}, ${address.state} ${address.pincode}`,
+        deliverySlot: 'Standard delivery',
+        paymentMethod: 'Pay on delivery',
+        subtotal,
+        discount: discountAmount,
+        couponCode: appliedCoupon?.code || null,
+        gst: 0,
+        delivery,
+        totalAmount: total,
+      });
+      if (isBuyNowCheckout) {
+        localStorage.removeItem('buy_now_items');
+      } else {
+        clearCart();
+        removeCoupon();
+      }
+      addToast('Order placed successfully!', 'success');
+      navigate('/track-order');
+    }, 600);
   };
 
   return (
@@ -210,15 +270,16 @@ const Checkout = () => {
                 <h2 className="text-xl font-extrabold text-slate-950">Delivery details</h2>
                 <p className="mt-1 text-sm text-slate-500">Your order will be delivered to this address.</p>
               </div>
-              <button
+              <LoadingButton
                 type="button"
                 onClick={handleUseCurrentLocation}
-                disabled={isLocating}
+                isLoading={isLocating}
+                loadingText="Locating..."
+                icon={LocateFixed}
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-teal-600 px-5 text-sm font-bold text-teal-700 transition hover:bg-teal-50 disabled:opacity-60"
               >
-                <LocateFixed size={18} />
-                {isLocating ? 'Locating...' : 'Use current address'}
-              </button>
+                Use current address
+              </LoadingButton>
             </div>
 
             <div className="mb-6 rounded-lg bg-teal-50 px-4 py-3 text-sm font-bold text-teal-700">
@@ -331,7 +392,8 @@ const Checkout = () => {
                   <Navigation className="mt-1 text-teal-700" size={18} />
                   <div>
                     <p className="font-extrabold text-slate-950">Map location</p>
-                    <p className="mt-1 text-sm text-slate-600">{mapLocation.lat}, {mapLocation.lng}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-700">{mapLocationLabel}</p>
+                    <p className="mt-1 text-xs text-slate-500">Pinned from current location</p>
                   </div>
                 </div>
               </div>
@@ -376,15 +438,17 @@ const Checkout = () => {
               <span>{formatCurrency(total)}</span>
             </div>
 
-            <button
+            <LoadingButton
               type="button"
               onClick={handlePlaceOrder}
               disabled={!isAddressReady}
+              isLoading={isPlacingOrder}
+              loadingText="Placing order..."
+              icon={isAddressReady ? PackageCheck : CheckCircle2}
               className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-teal-700 font-bold text-white transition hover:bg-teal-800 disabled:bg-slate-300 disabled:text-white"
             >
-              {isAddressReady ? <PackageCheck size={18} /> : <CheckCircle2 size={18} />}
               Place order
-            </button>
+            </LoadingButton>
             {!isAddressReady && (
               <p className="mt-4 text-sm text-slate-500">Complete required address fields before placing order.</p>
             )}

@@ -1,13 +1,16 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, ShieldCheck, ShoppingCart, Star, TrendingUp } from 'lucide-react';
 import { useCartStore, useWishlistStore } from '../../store/index.js';
 import { useToast } from '../common/Toast.jsx';
+import LoadingButton from '../common/LoadingButton.jsx';
 import { formatCurrency, getDiscountPercentage } from '../../utils/helpers.js';
 
 const ProductCard = ({ product }) => {
   const { items, addToCart } = useCartStore();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlistStore();
   const { addToast } = useToast();
+  const [loadingAction, setLoadingAction] = useState('');
   const inWishlist = isInWishlist(product.id);
   const cartItem = items.find(item => item.id === product.id);
   const cartQuantity = cartItem?.quantity || 0;
@@ -17,11 +20,25 @@ const ProductCard = ({ product }) => {
 
   const handleWishlist = (e) => {
     e.preventDefault();
-    if (inWishlist) {
-      removeFromWishlist(product.id);
-    } else {
-      addToWishlist(product);
-    }
+    setLoadingAction('wishlist');
+    window.setTimeout(() => {
+      if (inWishlist) {
+        removeFromWishlist(product.id);
+      } else {
+        addToWishlist(product);
+      }
+      setLoadingAction('');
+    }, 300);
+  };
+
+  const handleAddToCart = (e) => {
+    e.preventDefault();
+    setLoadingAction('cart');
+    window.setTimeout(() => {
+      addToCart(product, 1);
+      addToast(`${product.name} added to cart`, 'success');
+      setLoadingAction('');
+    }, 300);
   };
 
   return (
@@ -84,19 +101,18 @@ const ProductCard = ({ product }) => {
 
           {/* Actions */}
           <div className="mt-2 flex gap-1.5 sm:mt-2.5 sm:gap-2">
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                addToCart(product, 1);
-                addToast(`${product.name} added to cart`, 'success');
-              }}
+            <LoadingButton
+              onClick={handleAddToCart}
+              isLoading={loadingAction === 'cart'}
+              loadingText="Adding..."
+              icon={ShoppingCart}
               className="flex h-8 flex-1 items-center justify-center gap-1 rounded-lg bg-teal-700 text-xs font-semibold text-white transition hover:bg-teal-800 sm:h-9 sm:text-sm"
             >
-              <ShoppingCart size={14} className="sm:h-4 sm:w-4" />
               {cartQuantity > 0 ? `Add (${cartQuantity})` : 'Add'}
-            </button>
+            </LoadingButton>
             <button
               onClick={handleWishlist}
+              disabled={loadingAction === 'wishlist'}
               aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
               className={`grid h-8 w-8 place-items-center rounded-lg border text-sm transition sm:h-9 sm:w-10 ${
                 inWishlist

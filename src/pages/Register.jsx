@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/index.js';
 import { useToast } from '../components/common/Toast';
+import LoadingButton from '../components/common/LoadingButton.jsx';
 import { validateEmail, validateMobile } from '../utils/helpers.js';
 import { siteBanners } from '../data/dummy.js';
 import { LockKeyhole, Mail, Phone, Pill, ShieldCheck, User } from 'lucide-react';
@@ -19,6 +20,7 @@ const Register = () => {
   const { login } = useAuthStore();
   const { addToast } = useToast();
   const redirectTo = searchParams.get('redirect') || '/account';
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -58,9 +60,12 @@ const Register = () => {
       mobile: formData.mobile,
     };
 
-    login(user);
-    addToast('Registration successful!', 'success');
-    navigate(redirectTo);
+    setIsRegistering(true);
+    window.setTimeout(() => {
+      login(user);
+      addToast('Registration successful!', 'success');
+      navigate(redirectTo);
+    }, 500);
   };
 
   return (
@@ -195,12 +200,14 @@ const Register = () => {
           </label>
 
           {/* Register Button */}
-          <button
+          <LoadingButton
             onClick={handleRegister}
-            className="btn-primary w-full"
+            isLoading={isRegistering}
+            loadingText="Creating account..."
+            className="btn-primary inline-flex w-full items-center justify-center gap-2"
           >
             Create Account
-          </button>
+          </LoadingButton>
         </div>
 
         {/* Divider */}

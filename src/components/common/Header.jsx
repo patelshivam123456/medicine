@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, Headphones, Heart, LockKeyhole, LogOut, MapPin, Menu, Pill, Search, ShoppingCart, User, UserPlus, X } from 'lucide-react';
 import { useCartStore, useAuthStore } from '../../store/index.js';
 import { dummyBrands, dummyCategories, dummyProducts } from '../../data/dummy.js';
 import { getInitials } from '../../utils/helpers.js';
+import { buildAreaLabel, LOCATION_CHANGE_EVENT, readStoredLocationLabel, reverseGeocode, saveLocationLabel } from '../../utils/location.js';
 import Modal from './Modal.jsx';
 
 const Header = () => {
@@ -14,7 +15,7 @@ const Header = () => {
   const { user, isLoggedIn, logout } = useAuthStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState('Current location');
+  const [currentLocation, setCurrentLocation] = useState(readStoredLocationLabel);
   const [loginPrompt, setLoginPrompt] = useState(null);
 
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -77,6 +78,21 @@ const Header = () => {
     return [...categoryMatches, ...brandMatches, ...productMatches].slice(0, 8);
   }, [searchQuery]);
 
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setCurrentLocation('Current location');
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    const handleLocationChange = (event) => {
+      setCurrentLocation(event.detail || readStoredLocationLabel());
+    };
+
+    window.addEventListener(LOCATION_CHANGE_EVENT, handleLocationChange);
+    return () => window.removeEventListener(LOCATION_CHANGE_EVENT, handleLocationChange);
+  }, []);
+
   const runSearch = (event) => {
     event?.preventDefault();
     const query = searchQuery.trim();
@@ -123,8 +139,19 @@ const Header = () => {
 
     setCurrentLocation('Detecting...');
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setCurrentLocation(`${coords.latitude.toFixed(2)}, ${coords.longitude.toFixed(2)}`);
+      async ({ coords }) => {
+        const latitude = coords.latitude.toFixed(5);
+        const longitude = coords.longitude.toFixed(5);
+
+        try {
+          const locationData = await reverseGeocode(latitude, longitude);
+          const locationLabel = buildAreaLabel(locationData) || 'Detected nearby area';
+          setCurrentLocation(locationLabel);
+          saveLocationLabel(locationLabel);
+        } catch {
+          setCurrentLocation('Detected nearby area');
+          saveLocationLabel('Detected nearby area');
+        }
       },
       () => setCurrentLocation('Location unavailable'),
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }

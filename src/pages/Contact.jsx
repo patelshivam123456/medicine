@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useToast } from '../components/common/Toast';
+import LoadingButton from '../components/common/LoadingButton.jsx';
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -9,6 +10,7 @@ const Contact = () => {
     subject: '',
     message: '',
   });
+  const [isSending, setIsSending] = useState(false);
   const { addToast } = useToast();
 
   const handleChange = (e) => {
@@ -22,8 +24,12 @@ const Contact = () => {
       addToast('Please fill all required fields', 'error');
       return;
     }
-    addToast('Message sent successfully! We will get back to you soon.', 'success');
-    setFormData({ name: '', email: '', mobile: '', subject: '', message: '' });
+    setIsSending(true);
+    window.setTimeout(() => {
+      addToast('Message sent successfully! We will get back to you soon.', 'success');
+      setFormData({ name: '', email: '', mobile: '', subject: '', message: '' });
+      setIsSending(false);
+    }, 600);
   };
 
   return (
@@ -114,9 +120,14 @@ const Contact = () => {
                 />
               </div>
 
-              <button type="submit" className="btn-primary w-full">
+              <LoadingButton
+                type="submit"
+                isLoading={isSending}
+                loadingText="Sending..."
+                className="btn-primary inline-flex w-full items-center justify-center gap-2"
+              >
                 Send Message
-              </button>
+              </LoadingButton>
             </form>
           </div>
 

@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { usePrescriptionsStore, useAuthStore } from '../store/index.js';
 import { useToast } from '../components/common/Toast';
+import LoadingButton from '../components/common/LoadingButton.jsx';
 import { isValidFileType, isValidFileSize } from '../utils/helpers.js';
 import { Upload, X } from 'lucide-react';
 
 const UploadPrescription = () => {
   const [files, setFiles] = useState([]);
   const [dragActive, setDragActive] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const { uploadPrescription, prescriptions } = usePrescriptionsStore();
   const { isLoggedIn } = useAuthStore();
   const { addToast } = useToast();
@@ -84,15 +86,19 @@ const UploadPrescription = () => {
       return;
     }
 
-    files.forEach(fileData => {
-      uploadPrescription({
-        fileName: fileData.name,
-        fileType: fileData.type,
+    setIsUploading(true);
+    window.setTimeout(() => {
+      files.forEach(fileData => {
+        uploadPrescription({
+          fileName: fileData.name,
+          fileType: fileData.type,
+        });
       });
-    });
 
-    setFiles([]);
-    addToast('Prescription(s) uploaded successfully!', 'success');
+      setFiles([]);
+      setIsUploading(false);
+      addToast('Prescription(s) uploaded successfully!', 'success');
+    }, 700);
   };
 
   const formatFileSize = (bytes) => {
@@ -166,12 +172,15 @@ const UploadPrescription = () => {
                     </div>
                   ))}
                 </div>
-                <button
+                <LoadingButton
                   onClick={handleUpload}
-                  className="btn-primary w-full mt-4"
+                  isLoading={isUploading}
+                  loadingText="Uploading..."
+                  icon={Upload}
+                  className="btn-primary mt-4 inline-flex w-full items-center justify-center gap-2"
                 >
                   Upload {files.length} File{files.length > 1 ? 's' : ''}
-                </button>
+                </LoadingButton>
               </div>
             )}
           </div>

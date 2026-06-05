@@ -5,6 +5,7 @@ import { dummyCoupons, dummyProducts } from '../data/dummy.js';
 import { useToast } from '../components/common/Toast';
 import EmptyState from '../components/common/EmptyState';
 import Modal from '../components/common/Modal.jsx';
+import LoadingButton from '../components/common/LoadingButton.jsx';
 import { formatCurrency, calculateSubtotal } from '../utils/helpers.js';
 import { useState } from 'react';
 
@@ -18,6 +19,7 @@ const Cart = () => {
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [couponCode, setCouponCode] = useState(appliedCoupon?.code || '');
   const [savedForLater, setSavedForLater] = useState(() => JSON.parse(localStorage.getItem('saved_for_later')) || []);
+  const [loadingAction, setLoadingAction] = useState('');
   const addedProduct = dummyProducts.find(product => product.id === Number(searchParams.get('added')));
   const subtotal = calculateSubtotal(items);
   const discountAmount = appliedCoupon?.discountAmount || 0;
@@ -96,9 +98,13 @@ const Cart = () => {
       : coupon.discount;
     const nextDiscount = Math.min(rawDiscount, coupon.maxDiscount || rawDiscount, subtotal);
 
-    applyCoupon({ ...coupon, discountAmount: nextDiscount });
-    setCouponCode(coupon.code);
-    addToast(`${coupon.code} applied successfully`, 'success');
+    setLoadingAction('coupon');
+    window.setTimeout(() => {
+      applyCoupon({ ...coupon, discountAmount: nextDiscount });
+      setCouponCode(coupon.code);
+      setLoadingAction('');
+      addToast(`${coupon.code} applied successfully`, 'success');
+    }, 400);
   };
 
   const handleRemoveCoupon = () => {
@@ -124,7 +130,10 @@ const Cart = () => {
       setShowLoginPrompt(true);
       return;
     }
-    navigate('/checkout');
+    setLoadingAction('checkout');
+    window.setTimeout(() => {
+      navigate('/checkout');
+    }, 400);
   };
 
   if (items.length === 0 && savedForLater.length === 0) {
@@ -159,13 +168,15 @@ const Cart = () => {
               <p className="text-xl font-bold text-slate-950">
                 Cart subtotal: <span className="font-extrabold">{formatCurrency(cartTotal)}</span>
               </p>
-              <button
+              <LoadingButton
                 type="button"
                 onClick={handleProceedToCheckout}
-                className="mt-4 h-9 w-full rounded-full bg-yellow-400 text-sm font-semibold text-slate-950 hover:bg-yellow-300"
+                isLoading={loadingAction === 'checkout'}
+                loadingText="Opening..."
+                className="mt-4 inline-flex h-9 w-full items-center justify-center gap-2 rounded-full bg-yellow-400 text-sm font-semibold text-slate-950 hover:bg-yellow-300"
               >
                 Proceed to Buy ({itemCount} items)
-              </button>
+              </LoadingButton>
               <button
                 type="button"
                 onClick={() => navigate('/cart')}
@@ -284,13 +295,15 @@ const Cart = () => {
                   {appliedCoupon.code} saved {formatCurrency(discountAmount)}
                 </p>
               )}
-              <button
+              <LoadingButton
                 type="button"
                 onClick={handleProceedToCheckout}
-                className="mt-3 h-9 w-full rounded-full bg-yellow-400 text-sm font-semibold text-slate-950 hover:bg-yellow-300"
+                isLoading={loadingAction === 'checkout'}
+                loadingText="Opening..."
+                className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-full bg-yellow-400 text-sm font-semibold text-slate-950 hover:bg-yellow-300"
               >
                 Proceed to Buy
-              </button>
+              </LoadingButton>
             </div>
 
             <div className="rounded-lg border border-slate-300 bg-white p-5">
@@ -303,9 +316,15 @@ const Cart = () => {
                   placeholder="WELCOME20"
                   className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600"
                 />
-                <button type="button" onClick={handleApplyCoupon} className="rounded-lg bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800">
+                <LoadingButton
+                  type="button"
+                  onClick={handleApplyCoupon}
+                  isLoading={loadingAction === 'coupon'}
+                  loadingText="Applying..."
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"
+                >
                   Apply
-                </button>
+                </LoadingButton>
               </div>
               <p className="mt-2 text-xs text-slate-500">Try WELCOME20 or FIRST50.</p>
               {appliedCoupon && (

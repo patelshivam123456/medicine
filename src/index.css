@@ -8,11 +8,25 @@
   body {
     @apply bg-slate-50 text-slate-900 font-sans antialiased;
   }
+
+  a[href],
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  select,
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }
 
 @layer components {
   .btn-primary {
-    @apply px-4 py-2 text-white rounded-lg transition-colors font-semibold shadow-sm;
+    @apply px-4 py-2 text-white rounded-lg transition-colors font-semibold shadow-sm disabled:opacity-70;
     background-color: #0f766e;
   }
   
@@ -21,11 +35,11 @@
   }
   
   .btn-secondary {
-    @apply px-4 py-2 bg-gray-100 text-gray-900 rounded-lg hover:bg-gray-200 transition-colors font-medium;
+    @apply px-4 py-2 bg-gray-100 text-gray-900 rounded-lg hover:bg-gray-200 transition-colors font-medium disabled:opacity-70;
   }
   
   .btn-outline {
-    @apply px-4 py-2 rounded-lg transition-colors font-medium;
+    @apply px-4 py-2 rounded-lg transition-colors font-medium disabled:opacity-70;
     border: 1px solid #0f766e;
     color: #0f766e;
   }

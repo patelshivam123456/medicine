@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { clearStoredLocationLabel } from '../utils/location.js';
 
 // Cart Store
 export const useCartStore = create((set, get) => ({
@@ -106,6 +107,8 @@ export const useAuthStore = create((set, get) => ({
   
   logout: () => {
     localStorage.removeItem('auth_user');
+    localStorage.removeItem('selected_address');
+    clearStoredLocationLabel();
     set({ user: null, isLoggedIn: false });
   },
   

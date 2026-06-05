@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/index.js';
 import { useToast } from '../components/common/Toast';
+import LoadingButton from '../components/common/LoadingButton.jsx';
 import { validateEmail, validateMobile } from '../utils/helpers.js';
 import { siteBanners } from '../data/dummy.js';
 import { LockKeyhole, Mail, Phone, Pill, ShieldCheck } from 'lucide-react';
@@ -13,6 +14,7 @@ const Login = () => {
   const [showOtp, setShowOtp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loadingAction, setLoadingAction] = useState('');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login } = useAuthStore();
@@ -24,8 +26,12 @@ const Login = () => {
       addToast('Invalid mobile number', 'error');
       return;
     }
-    setShowOtp(true);
-    addToast('OTP sent to your mobile', 'success');
+    setLoadingAction('send-otp');
+    window.setTimeout(() => {
+      setShowOtp(true);
+      setLoadingAction('');
+      addToast('OTP sent to your mobile', 'success');
+    }, 500);
   };
 
   const handleVerifyOtp = () => {
@@ -33,15 +39,18 @@ const Login = () => {
       addToast('Invalid OTP', 'error');
       return;
     }
-    const user = {
-      id: Date.now(),
-      name: `MediCare User ${mobile.slice(-4)}`,
-      mobile,
-      email: 'user@example.com',
-    };
-    login(user);
-    addToast('Login successful!', 'success');
-    navigate(redirectTo);
+    setLoadingAction('verify-otp');
+    window.setTimeout(() => {
+      const user = {
+        id: Date.now(),
+        name: `MediCare User ${mobile.slice(-4)}`,
+        mobile,
+        email: 'user@example.com',
+      };
+      login(user);
+      addToast('Login successful!', 'success');
+      navigate(redirectTo);
+    }, 500);
   };
 
   const handleEmailLogin = () => {
@@ -53,15 +62,18 @@ const Login = () => {
       addToast('Password must be at least 6 characters', 'error');
       return;
     }
-    const user = {
-      id: Date.now(),
-      name: 'Rajesh Kumar',
-      mobile: '9876543210',
-      email: email,
-    };
-    login(user);
-    addToast('Login successful!', 'success');
-    navigate(redirectTo);
+    setLoadingAction('email-login');
+    window.setTimeout(() => {
+      const user = {
+        id: Date.now(),
+        name: 'Rajesh Kumar',
+        mobile: '9876543210',
+        email: email,
+      };
+      login(user);
+      addToast('Login successful!', 'success');
+      navigate(redirectTo);
+    }, 500);
   };
 
   return (
@@ -146,12 +158,14 @@ const Login = () => {
                   />
                   </div>
                 </div>
-                <button
+                <LoadingButton
                   onClick={handleMobileLogin}
-                  className="btn-primary w-full"
+                  isLoading={loadingAction === 'send-otp'}
+                  loadingText="Sending OTP..."
+                  className="btn-primary inline-flex w-full items-center justify-center gap-2"
                 >
                   Send OTP
-                </button>
+                </LoadingButton>
               </>
             ) : (
               <>
@@ -169,12 +183,14 @@ const Login = () => {
                   />
                   <p className="text-xs text-slate-500 mt-2">Check your SMS for OTP</p>
                 </div>
-                <button
+                <LoadingButton
                   onClick={handleVerifyOtp}
-                  className="btn-primary w-full"
+                  isLoading={loadingAction === 'verify-otp'}
+                  loadingText="Verifying..."
+                  className="btn-primary inline-flex w-full items-center justify-center gap-2"
                 >
                   Verify OTP
-                </button>
+                </LoadingButton>
                 <button
                   onClick={() => setShowOtp(false)}
                   className="btn-secondary w-full"
@@ -219,12 +235,14 @@ const Login = () => {
               />
               </div>
             </div>
-            <button
+            <LoadingButton
               onClick={handleEmailLogin}
-              className="btn-primary w-full"
+              isLoading={loadingAction === 'email-login'}
+              loadingText="Logging in..."
+              className="btn-primary inline-flex w-full items-center justify-center gap-2"
             >
               Login
-            </button>
+            </LoadingButton>
           </div>
         )}
 
