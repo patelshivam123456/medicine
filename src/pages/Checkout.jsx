@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, ChevronDown, LocateFixed, LockKeyhole, MapPin, Navigation, PackageCheck, PlusCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, LocateFixed, LockKeyhole, MapPin, Navigation, PackageCheck, PlusCircle } from 'lucide-react';
 import { useCartStore, useAuthStore, usePreferencesStore, useOrdersStore } from '../store/index.js';
 import { useToast } from '../components/common/Toast';
 import LoadingButton from '../components/common/LoadingButton.jsx';
 import Modal from '../components/common/Modal.jsx';
 import { validateMobile, validatePincode, generateOrderNumber, calculateSubtotal, calculateDeliveryCharges, formatCurrency } from '../utils/helpers.js';
 import { buildAreaLabel, readStoredLocationLabel, reverseGeocode, saveLocationLabel } from '../utils/location.js';
+
+const B2B_MIN_ORDER_QUANTITY = 10;
 
 const createBlankAddress = (user) => ({
   fullName: user?.name || '',
@@ -54,7 +56,7 @@ const getPreferredAddress = (user, savedAddresses, selectedAddress) => {
 const Checkout = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { items, clearCart } = useCartStore();
+  const { items, clearCart, updateQuantity } = useCartStore();
   const { user, isLoggedIn } = useAuthStore();
   const { addAddress, savedAddresses, selectedAddress, setSelectedAddress, appliedCoupon, removeCoupon } = usePreferencesStore();
   const { createOrder } = useOrdersStore();
@@ -63,11 +65,14 @@ const Checkout = () => {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [mapLocationLabel, setMapLocationLabel] = useState(readStoredLocationLabel);
   const [address, setAddress] = useState(() => getPreferredAddress(user, savedAddresses, selectedAddress));
-  const [buyNowItems] = useState(() => JSON.parse(localStorage.getItem('buy_now_items')) || []);
+  const [buyNowItems, setBuyNowItems] = useState(() => JSON.parse(localStorage.getItem('buy_now_items')) || []);
   const [isAddressDropdownOpen, setIsAddressDropdownOpen] = useState(false);
+  const [showB2BQuantityPrompt, setShowB2BQuantityPrompt] = useState(false);
   const isBuyNowCheckout = searchParams.get('buyNow') === '1';
   const checkoutItems = isBuyNowCheckout ? buyNowItems : items;
   const isB2B = !!user?.isB2B;
+  const b2bLowQuantityItems = isB2B ? checkoutItems.filter(item => Number(item.quantity || 0) < B2B_MIN_ORDER_QUANTITY) : [];
+  const hasB2BQuantityIssue = b2bLowQuantityItems.length > 0;
   const registeredBusinessAddress = useMemo(() => createBusinessAddress(user?.businessProfile, user), [user]);
 
   const subtotal = calculateSubtotal(checkoutItems);
@@ -237,7 +242,31 @@ const Checkout = () => {
     );
   };
 
+  const handleUpdateB2BMinimumQuantities = () => {
+    if (isBuyNowCheckout) {
+      const updatedItems = buyNowItems.map(item => (
+        Number(item.quantity || 0) < B2B_MIN_ORDER_QUANTITY
+          ? { ...item, quantity: B2B_MIN_ORDER_QUANTITY }
+          : item
+      ));
+      setBuyNowItems(updatedItems);
+      localStorage.setItem('buy_now_items', JSON.stringify(updatedItems));
+    } else {
+      b2bLowQuantityItems.forEach(item => {
+        updateQuantity(item.id, B2B_MIN_ORDER_QUANTITY);
+      });
+    }
+    setShowB2BQuantityPrompt(false);
+    addToast(`B2B quantities updated to minimum ${B2B_MIN_ORDER_QUANTITY} units.`, 'success');
+  };
+
   const handlePlaceOrder = () => {
+    if (hasB2BQuantityIssue) {
+      setShowB2BQuantityPrompt(true);
+      addToast(`B2B checkout needs at least ${B2B_MIN_ORDER_QUANTITY} units per product.`, 'warning');
+      return;
+    }
+
     if (!isAddressReady) {
       addToast('Complete required address fields before placing order.', 'error');
       return;
@@ -324,6 +353,25 @@ const Checkout = () => {
             <div className="mb-6 rounded-lg bg-teal-50 px-4 py-3 text-sm font-bold text-teal-700">
               {isB2B ? 'Registered business address selected for this B2B order.' : deliveryAddressMessage}
             </div>
+
+            {hasB2BQuantityIssue && (
+              <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="mt-0.5 shrink-0 text-amber-700" size={20} />
+                    <div>
+                      <p className="font-bold text-amber-950">B2B order quantity is too low</p>
+                      <p className="mt-1 text-sm leading-6 text-amber-800">
+                        You are now a B2B buyer. Each product must have at least {B2B_MIN_ORDER_QUANTITY} units before checkout.
+                      </p>
+                    </div>
+                  </div>
+                  <button type="button" onClick={handleUpdateB2BMinimumQuantities} className="btn-primary h-10 shrink-0 px-4 text-sm">
+                    Update all to {B2B_MIN_ORDER_QUANTITY}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {!isB2B && savedAddresses.length > 0 && (
               <div className="mb-6">
@@ -461,9 +509,14 @@ const Checkout = () => {
             )}
             <div className="space-y-4">
               {checkoutItems.map(item => (
-                <div key={item.id} className="flex justify-between gap-4 text-sm">
-                  <span className="line-clamp-1 text-slate-600">{item.name} x {item.quantity}</span>
-                  <span className="font-extrabold text-slate-950">{formatCurrency(item.price * item.quantity)}</span>
+                <div key={item.id} className="text-sm">
+                  <div className="flex justify-between gap-4">
+                    <span className="line-clamp-1 text-slate-600">{item.name} x {item.quantity}</span>
+                    <span className="font-extrabold text-slate-950">{formatCurrency(item.price * item.quantity)}</span>
+                  </div>
+                  {isB2B && item.quantity < B2B_MIN_ORDER_QUANTITY && (
+                    <p className="mt-1 text-xs font-bold text-amber-700">Minimum B2B qty: {B2B_MIN_ORDER_QUANTITY}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -502,12 +555,52 @@ const Checkout = () => {
             >
               {isB2B ? 'Place B2B order' : 'Place order'}
             </LoadingButton>
+            {hasB2BQuantityIssue && (
+              <p className="mt-4 text-sm font-semibold text-amber-700">
+                Increase {b2bLowQuantityItems.length} product{b2bLowQuantityItems.length > 1 ? 's' : ''} to {B2B_MIN_ORDER_QUANTITY}+ units for B2B checkout.
+              </p>
+            )}
             {!isAddressReady && (
               <p className="mt-4 text-sm text-slate-500">Complete required address fields before placing order.</p>
             )}
           </aside>
         </div>
       </div>
+
+      <Modal
+        isOpen={showB2BQuantityPrompt}
+        onClose={() => setShowB2BQuantityPrompt(false)}
+        title="B2B minimum quantity required"
+      >
+        <div>
+          <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-amber-50 text-amber-700">
+            <AlertTriangle size={28} />
+          </div>
+          <h3 className="text-center text-xl font-bold text-slate-950">You cannot checkout with this quantity</h3>
+          <p className="mt-2 text-center text-sm leading-6 text-slate-500">
+            Your account is B2B now. B2B orders require at least {B2B_MIN_ORDER_QUANTITY} units for every product.
+          </p>
+          <div className="mt-5 space-y-3">
+            {b2bLowQuantityItems.map(item => (
+              <div key={item.id} className="flex items-center justify-between gap-4 rounded-lg bg-slate-50 p-3">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-bold text-slate-950">{item.name}</span>
+                  <span className="mt-1 block text-xs font-semibold text-amber-700">Current qty: {item.quantity}</span>
+                </span>
+                <span className="shrink-0 text-sm font-bold text-slate-950">Need {B2B_MIN_ORDER_QUANTITY}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <button type="button" onClick={handleUpdateB2BMinimumQuantities} className="btn-primary h-11">
+              Update all to {B2B_MIN_ORDER_QUANTITY}
+            </button>
+            <button type="button" onClick={() => navigate('/cart')} className="btn-outline h-11">
+              Review cart
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { dummyProducts, dummyReviews } from '../data/dummy';
 import ProductCard from '../components/products/ProductCard';
@@ -10,31 +10,38 @@ import {
   BadgeCheck,
   ChevronLeft,
   ChevronRight,
+  Copy,
   FileText,
   Heart,
   LockKeyhole,
+  Mail,
   MessageSquarePlus,
   Minus,
   PackageCheck,
   Plus,
+  Share2,
   ShieldCheck,
   ShoppingCart,
   Star,
+  Smartphone,
   Truck,
   UserPlus,
+  X,
 } from 'lucide-react';
 import { formatCurrency, getDiscountPercentage, getStorefrontProduct } from '../utils/helpers.js';
+
+const B2B_MIN_ORDER_QUANTITY = 10;
 
 const ProductDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [quantity, setQuantity] = useState(1);
   const product = dummyProducts.find(p => p.id === parseInt(id));
   const [activeImage, setActiveImage] = useState(product?.image);
   const [activeTab, setActiveTab] = useState('description');
   const [newReviews, setNewReviews] = useState([]);
   const [reviewForm, setReviewForm] = useState({ rating: 5, title: '', content: '' });
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showSharePanel, setShowSharePanel] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [loginPromptType, setLoginPromptType] = useState('review');
   const [loadingAction, setLoadingAction] = useState('');
@@ -45,10 +52,16 @@ const ProductDetail = () => {
   const storefrontProduct = product ? getStorefrontProduct(product, user) : null;
   const inWishlist = storefrontProduct && isInWishlist(storefrontProduct.id);
   const cartQuantity = items.find(item => item.id === storefrontProduct?.id)?.quantity || 0;
-
-  useEffect(() => {
-    setQuantity(cartQuantity > 0 ? cartQuantity : 1);
-  }, [cartQuantity, product?.id]);
+  const minQuantity = storefrontProduct?.isB2BPrice ? B2B_MIN_ORDER_QUANTITY : 1;
+  const defaultQuantity = cartQuantity > 0 ? Math.max(cartQuantity, minQuantity) : minQuantity;
+  const [quantityByProduct, setQuantityByProduct] = useState({});
+  const quantity = quantityByProduct[storefrontProduct?.id] ?? defaultQuantity;
+  const setProductQuantity = (nextQuantity) => {
+    setQuantityByProduct(prev => ({
+      ...prev,
+      [storefrontProduct.id]: typeof nextQuantity === 'function' ? nextQuantity(quantity) : nextQuantity,
+    }));
+  };
 
   if (!product) {
     return (
@@ -119,6 +132,72 @@ const ProductDetail = () => {
       }
       setLoadingAction('');
     }, 300);
+  };
+
+  const shareUrl = `${window.location.origin}/products/${storefrontProduct.id}`;
+  const shareText = `Check out ${storefrontProduct.name} on MediCare`;
+  const encodedShareUrl = encodeURIComponent(shareUrl);
+  const encodedShareText = encodeURIComponent(shareText);
+  const encodedShareMessage = encodeURIComponent(`${shareText} ${shareUrl}`);
+
+  const handleCopyShareLink = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = shareUrl;
+        textArea.setAttribute('readonly', '');
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+
+      addToast('Product link copied to clipboard', 'success');
+    } catch {
+      addToast('Unable to copy product link', 'error');
+    }
+  };
+
+  const handleShareOption = async (type) => {
+    const shareTargets = {
+      whatsapp: `https://wa.me/?text=${encodedShareMessage}`,
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedShareUrl}`,
+      messenger: `fb-messenger://share/?link=${encodedShareUrl}`,
+      gmail: `mailto:?subject=${encodedShareText}&body=${encodedShareMessage}`,
+      sms: `sms:?&body=${encodedShareMessage}`,
+      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedShareUrl}`,
+    };
+
+    if (type === 'copy') {
+      await handleCopyShareLink();
+      setShowSharePanel(false);
+      return;
+    }
+
+    if (type === 'native' && navigator.share) {
+      try {
+        await navigator.share({ title: storefrontProduct.name, text: shareText, url: shareUrl });
+        setShowSharePanel(false);
+      } catch {
+        addToast('Unable to share this product right now', 'error');
+      }
+      return;
+    }
+
+    const targetUrl = shareTargets[type];
+    if (!targetUrl) return;
+
+    if (type === 'gmail' || type === 'sms' || type === 'messenger') {
+      window.open(targetUrl, '_self');
+    } else {
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    }
+
+    setShowSharePanel(false);
   };
 
   const handleSubmitReview = (event) => {
@@ -227,6 +306,27 @@ const ProductDetail = () => {
                       </span>
                     )}
                   </div>
+                  <div className="absolute right-3 top-3 flex flex-col gap-3 sm:right-4 sm:top-4">
+                    <button
+                      type="button"
+                      onClick={handleWishlist}
+                      disabled={loadingAction === 'wishlist'}
+                      className={`grid h-11 w-11 place-items-center rounded-lg bg-white/95 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-70 sm:h-12 sm:w-12 ${
+                        inWishlist ? 'text-rose-600' : 'text-slate-800'
+                      }`}
+                      aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                    >
+                      <Heart size={23} fill={inWishlist ? 'currentColor' : 'none'} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSharePanel(true)}
+                      className="grid h-11 w-11 place-items-center rounded-lg bg-white/95 text-slate-800 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-white sm:h-12 sm:w-12"
+                      aria-label="Share product"
+                    >
+                      <Share2 size={23} />
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleImageStep(-1)}
@@ -317,7 +417,7 @@ const ProductDetail = () => {
                 <span className="text-sm font-semibold text-slate-700">Quantity</span>
                 <div className="flex items-center overflow-hidden rounded-full border border-slate-200">
                   <button
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    onClick={() => setProductQuantity(Math.max(minQuantity, quantity - 1))}
                     className="grid h-10 w-10 place-items-center text-slate-600 hover:bg-slate-100"
                     aria-label="Decrease quantity"
                   >
@@ -325,17 +425,20 @@ const ProductDetail = () => {
                   </button>
                   <span className="min-w-12 border-l border-r border-slate-200 px-4 py-2 text-center font-semibold">{quantity}</span>
                   <button
-                    onClick={() => setQuantity(quantity + 1)}
+                    onClick={() => setProductQuantity(quantity + 1)}
                     className="grid h-10 w-10 place-items-center text-slate-600 hover:bg-slate-100"
                     aria-label="Increase quantity"
                   >
                     <Plus size={16} />
                   </button>
                 </div>
+                {storefrontProduct.isB2BPrice && (
+                  <p className="text-sm font-bold text-amber-700">B2B minimum order quantity is {B2B_MIN_ORDER_QUANTITY} units.</p>
+                )}
               </div>
 
               {/* Action Buttons */}
-              <div className="mb-6 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_3rem] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_3.5rem] sm:gap-3">
+              <div className="mb-6 grid grid-cols-2 gap-2 sm:gap-3">
                 <LoadingButton
                   onClick={handleAddToCart}
                   disabled={product.stock === 0}
@@ -357,17 +460,6 @@ const ProductDetail = () => {
                 >
                   Buy Now
                 </LoadingButton>
-                <button
-                  onClick={handleWishlist}
-                  disabled={loadingAction === 'wishlist'}
-                  className={`grid h-12 w-12 shrink-0 place-items-center rounded-lg border transition sm:w-14 ${
-                    inWishlist
-                      ? 'bg-rose-50 border-rose-500 text-rose-600'
-                      : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <Heart size={20} fill={inWishlist ? 'currentColor' : 'none'} />
-                </button>
               </div>
 
               {/* Benefits */}
@@ -531,6 +623,74 @@ const ProductDetail = () => {
           </section>
         )}
       </div>
+
+      {showSharePanel && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center lg:items-stretch lg:justify-end">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-950/55"
+            onClick={() => setShowSharePanel(false)}
+            aria-label="Close share panel"
+          />
+          <div className="relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-lg bg-white shadow-2xl sm:max-w-lg sm:rounded-lg lg:h-full lg:max-h-none lg:w-[31rem] lg:rounded-none">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-4">
+              <button
+                type="button"
+                onClick={() => setShowSharePanel(false)}
+                className="grid h-9 w-9 place-items-center rounded-full text-slate-600 transition hover:bg-slate-100"
+                aria-label="Close share panel"
+              >
+                <X size={22} />
+              </button>
+              <h2 className="text-base font-bold text-slate-900">Share</h2>
+            </div>
+
+            <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+              <img
+                src={selectedImage}
+                alt={product.name}
+                className="h-12 w-12 shrink-0 rounded-md border border-slate-200 bg-white object-cover"
+                onError={(event) => {
+                  event.currentTarget.src = product.image;
+                }}
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-950">{storefrontProduct.name}</p>
+                <p className="truncate text-xs text-slate-500">{product.description}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-x-3 gap-y-6 overflow-y-auto px-4 py-5 sm:grid-cols-4 lg:grid-cols-3">
+              {[
+                { id: 'copy', label: 'Copy Link', icon: Copy, className: 'bg-violet-600 text-white' },
+                { id: 'whatsapp', label: 'Whatsapp', icon: MessageSquarePlus, className: 'bg-emerald-500 text-white' },
+                { id: 'facebook', label: 'Facebook', textIcon: 'f', className: 'bg-indigo-600 text-white' },
+                { id: 'messenger', label: 'Messenger', icon: MessageSquarePlus, className: 'bg-blue-600 text-white' },
+                { id: 'gmail', label: 'Gmail', icon: Mail, className: 'bg-red-500 text-white' },
+                { id: 'sms', label: 'SMS', icon: Smartphone, className: 'bg-purple-600 text-white' },
+                { id: 'linkedin', label: 'LinkedIn', textIcon: 'in', className: 'bg-sky-700 text-white' },
+                ...(navigator.share ? [{ id: 'native', label: 'More', icon: Share2, className: 'bg-slate-800 text-white' }] : []),
+              ].map((option) => {
+                const Icon = option.icon;
+
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => handleShareOption(option.id)}
+                    className="flex min-w-0 flex-col items-center gap-2 text-center"
+                  >
+                    <span className={`grid h-12 w-12 place-items-center rounded-full shadow-sm ${option.className}`}>
+                      {Icon ? <Icon size={24} /> : <span className="text-3xl font-black leading-none">{option.textIcon}</span>}
+                    </span>
+                    <span className="max-w-full break-words text-xs font-medium leading-4 text-slate-600">{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       <Modal
         isOpen={showReviewModal}

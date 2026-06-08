@@ -1,6 +1,43 @@
 import { create } from 'zustand';
 import { clearStoredLocationLabel } from '../utils/location.js';
 
+const B2B_MIN_ORDER_QUANTITY = 10;
+
+const getOrderItemPrice = (item) => Number(item.price ?? item.b2bPrice ?? item.retailPrice ?? 0);
+
+const normalizeB2BOrder = (order) => {
+  if (order?.accountType !== 'B2B') return order;
+
+  const items = (order.items || []).map(item => ({
+    ...item,
+    quantity: Math.max(Number(item.quantity || 1), B2B_MIN_ORDER_QUANTITY),
+  }));
+  const subtotal = items.reduce((sum, item) => sum + getOrderItemPrice(item) * Number(item.quantity || 1), 0);
+  const discount = Math.min(order.discount || 0, subtotal);
+  const totalAmount = Math.max(subtotal - discount, 0) + (order.delivery || 0) + (order.gst || 0);
+
+  return {
+    ...order,
+    items,
+    subtotal,
+    discount,
+    totalAmount,
+    b2bMinimumQuantity: B2B_MIN_ORDER_QUANTITY,
+  };
+};
+
+const loadOrders = () => {
+  const orders = JSON.parse(localStorage.getItem('orders')) || [];
+  const normalizedOrders = orders.map(normalizeB2BOrder);
+  const changed = JSON.stringify(orders) !== JSON.stringify(normalizedOrders);
+
+  if (changed) {
+    localStorage.setItem('orders', JSON.stringify(normalizedOrders));
+  }
+
+  return normalizedOrders;
+};
+
 // Cart Store
 export const useCartStore = create((set, get) => ({
   items: JSON.parse(localStorage.getItem('cart')) || [],
@@ -180,16 +217,16 @@ export const usePreferencesStore = create((set) => ({
 
 // Orders Store
 export const useOrdersStore = create((set, get) => ({
-  orders: JSON.parse(localStorage.getItem('orders')) || [],
+  orders: loadOrders(),
   
   createOrder: (orderData) => {
     set((state) => {
-      const newOrder = {
+      const newOrder = normalizeB2BOrder({
         ...orderData,
         id: Date.now(),
         createdAt: new Date().toISOString(),
         status: 'Order Placed',
-      };
+      });
       const newOrders = [newOrder, ...state.orders];
       localStorage.setItem('orders', JSON.stringify(newOrders));
       return { orders: newOrders };
@@ -199,7 +236,7 @@ export const useOrdersStore = create((set, get) => ({
   updateOrder: (id, data) => {
     set((state) => {
       const newOrders = state.orders.map(order =>
-        order.id === id ? { ...order, ...data } : order
+        order.id === id ? normalizeB2BOrder({ ...order, ...data }) : order
       );
       localStorage.setItem('orders', JSON.stringify(newOrders));
       return { orders: newOrders };

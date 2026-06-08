@@ -6,6 +6,8 @@ import { useToast } from '../common/Toast.jsx';
 import LoadingButton from '../common/LoadingButton.jsx';
 import { formatCurrency, getDiscountPercentage, getStorefrontProduct } from '../../utils/helpers.js';
 
+const B2B_MIN_ORDER_QUANTITY = 10;
+
 const ProductCard = ({ product }) => {
   const { items, addToCart } = useCartStore();
   const { user } = useAuthStore();
@@ -20,11 +22,12 @@ const ProductCard = ({ product }) => {
 
   const discount = getDiscountPercentage(storefrontProduct.mrp, storefrontProduct.price);
   const isBestSeller = Number(storefrontProduct.rating) >= 4.4 || Number(storefrontProduct.reviews) > 500;
-  const maxQuantity = Math.max(storefrontProduct.stock || 1, 1);
+  const minQuantity = storefrontProduct.isB2BPrice ? B2B_MIN_ORDER_QUANTITY : 1;
+  const maxQuantity = Math.max(storefrontProduct.stock || minQuantity, minQuantity);
   const selectedQuantity = storefrontProduct.isB2BPrice ? b2bQuantity : 1;
 
   const updateB2BQuantity = (value) => {
-    const nextValue = Math.min(Math.max(Number(value) || 1, 1), maxQuantity);
+    const nextValue = Math.min(Math.max(Number(value) || minQuantity, minQuantity), maxQuantity);
     setB2BQuantity(nextValue);
   };
 
