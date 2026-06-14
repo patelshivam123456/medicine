@@ -26,6 +26,21 @@ const normalizeB2BOrder = (order) => {
   };
 };
 
+const createBusinessSavedAddress = (businessProfile, user) => ({
+  id: businessProfile?.addressId || `business-${businessProfile?.id || Date.now()}`,
+  source: 'business-profile',
+  sourceId: businessProfile?.id,
+  label: 'Registered Business',
+  fullName: businessProfile?.contactPersonName || user?.name || '',
+  mobile: businessProfile?.mobileNumber || user?.mobile || '',
+  houseNumber: businessProfile?.businessName || '',
+  area: businessProfile?.businessAddress || '',
+  landmark: businessProfile?.registrationNumber ? `Registration: ${businessProfile.registrationNumber}` : '',
+  city: businessProfile?.city || '',
+  state: businessProfile?.state || '',
+  pincode: businessProfile?.pincode || '',
+});
+
 const loadOrders = () => {
   const orders = JSON.parse(localStorage.getItem('orders')) || [];
   const normalizedOrders = orders.map(normalizeB2BOrder);
@@ -156,12 +171,17 @@ export const useAuthStore = create((set, get) => ({
   },
 
   attachBusinessProfile: (businessProfile) => {
+    const wasB2B = !!get().user?.isB2B;
     const updatedUser = {
       ...get().user,
       isB2B: true,
       accountType: 'B2B',
       businessProfile,
     };
+    if (!wasB2B) {
+      useCartStore.getState().clearCart();
+    }
+    usePreferencesStore.getState().saveBusinessAddress(businessProfile, updatedUser);
     localStorage.setItem('auth_user', JSON.stringify(updatedUser));
     set({ user: updatedUser, isLoggedIn: true });
   },
@@ -176,6 +196,25 @@ export const usePreferencesStore = create((set) => ({
   addAddress: (address) => {
     set((state) => {
       const newAddresses = [...state.savedAddresses, { ...address, id: Date.now() }];
+      localStorage.setItem('saved_addresses', JSON.stringify(newAddresses));
+      return { savedAddresses: newAddresses };
+    });
+  },
+
+  saveBusinessAddress: (businessProfile, user) => {
+    const businessAddress = createBusinessSavedAddress(businessProfile, user);
+
+    set((state) => {
+      const existingIndex = state.savedAddresses.findIndex(address =>
+        (address.source === 'business-profile' && address.sourceId === businessProfile?.id) ||
+        address.id === businessAddress.id
+      );
+      const newAddresses = existingIndex >= 0
+        ? state.savedAddresses.map((address, index) => (
+          index === existingIndex ? { ...address, ...businessAddress, id: address.id } : address
+        ))
+        : [businessAddress, ...state.savedAddresses];
+
       localStorage.setItem('saved_addresses', JSON.stringify(newAddresses));
       return { savedAddresses: newAddresses };
     });

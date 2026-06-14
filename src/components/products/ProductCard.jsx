@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, Minus, Plus, ShieldCheck, ShoppingCart, Star, TrendingUp } from 'lucide-react';
+import { Heart, Minus, Plus, Share2, ShieldCheck, ShoppingCart, Star, TrendingUp } from 'lucide-react';
 import { useAuthStore, useCartStore, useWishlistStore } from '../../store/index.js';
 import { useToast } from '../common/Toast.jsx';
 import LoadingButton from '../common/LoadingButton.jsx';
@@ -33,15 +33,42 @@ const ProductCard = ({ product }) => {
 
   const handleWishlist = (e) => {
     e.preventDefault();
+    e.stopPropagation();
     setLoadingAction('wishlist');
     window.setTimeout(() => {
       if (inWishlist) {
         removeFromWishlist(storefrontProduct.id);
+        addToast('Removed from wishlist', 'info');
       } else {
         addToWishlist(storefrontProduct);
+        addToast('Added to wishlist', 'success');
       }
       setLoadingAction('');
     }, 300);
+  };
+
+  const handleShare = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const shareUrl = `${window.location.origin}/products/${storefrontProduct.id}`;
+    const shareData = {
+      title: storefrontProduct.name,
+      text: `Check out ${storefrontProduct.name} on MediCare`,
+      url: shareUrl,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+
+      await navigator.clipboard.writeText(shareUrl);
+      addToast('Product link copied', 'success');
+    } catch {
+      addToast('Unable to share this product right now', 'error');
+    }
   };
 
   const handleAddToCart = (e) => {
@@ -91,6 +118,27 @@ const ProductCard = ({ product }) => {
               Genuine
             </div>
           )}
+          <div className="absolute right-2 top-2 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={handleWishlist}
+              disabled={loadingAction === 'wishlist'}
+              aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+              className={`grid h-8 w-8 place-items-center rounded-full bg-white/95 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-70 sm:h-9 sm:w-9 ${
+                inWishlist ? 'text-rose-600' : 'text-slate-800'
+              }`}
+            >
+              <Heart size={16} fill={inWishlist ? 'currentColor' : 'none'} />
+            </button>
+            <button
+              type="button"
+              onClick={handleShare}
+              aria-label="Share product"
+              className="grid h-8 w-8 place-items-center rounded-full bg-white/95 text-slate-800 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-white sm:h-9 sm:w-9"
+            >
+              <Share2 size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Product Info */}
@@ -176,18 +224,6 @@ const ProductCard = ({ product }) => {
             >
               {cartQuantity > 0 ? `Add (${cartQuantity})` : storefrontProduct.isB2BPrice ? 'Add B2B' : 'Add'}
             </LoadingButton>
-            <button
-              onClick={handleWishlist}
-              disabled={loadingAction === 'wishlist'}
-              aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
-              className={`grid h-8 w-8 place-items-center rounded-lg border text-sm transition sm:h-9 sm:w-10 ${
-                inWishlist
-                  ? 'border-rose-500 bg-rose-50 text-rose-600'
-                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Heart size={15} fill={inWishlist ? 'currentColor' : 'none'} />
-            </button>
           </div>
         </div>
       </div>

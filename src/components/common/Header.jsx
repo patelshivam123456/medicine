@@ -20,6 +20,7 @@ const Header = () => {
   const displayedLocation = isLoggedIn ? currentLocation : 'Current location';
 
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  const b2bNavLabel = user?.isB2B ? 'B2B Login' : 'B2B Business';
   const avatarImage = user?.image || user?.avatar;
   const medicineCategories = dummyCategories.filter(category =>
     ['medicines', 'healthcare', 'diabetes-care', 'heart-care', 'medical-devices', 'vitamins'].includes(category.slug)
@@ -301,7 +302,7 @@ const Header = () => {
                   </div>
                 </div>
               )}
-              <Link to="/b2b" className="whitespace-nowrap hover:text-teal-700">{user?.isB2B ? 'B2B Account' : 'B2B Business'}</Link>
+              <Link to="/b2b" className="whitespace-nowrap hover:text-teal-700">{b2bNavLabel}</Link>
               <Link to="/register" className="whitespace-nowrap hover:text-teal-700">Become a Seller</Link>
               <Link to="/wishlist" className="inline-flex items-center gap-2 hover:text-teal-700">
                 <Heart size={20} />
@@ -401,7 +402,7 @@ const Header = () => {
               Health Blogs
             </Link>
             <Link to="/b2b" className="transition hover:text-teal-700">
-              {user?.isB2B ? 'B2B Account' : 'B2B Business'}
+              {b2bNavLabel}
             </Link>
           </div>
         </nav>
@@ -551,7 +552,7 @@ const Header = () => {
               Health Blogs
             </Link>
             <Link to="/b2b" onClick={() => setMobileMenuOpen(false)} className="border-b border-slate-100 px-4 py-3 font-bold text-slate-800 hover:bg-slate-50">
-              {user?.isB2B ? 'B2B Account' : 'B2B Business'}
+              {b2bNavLabel}
             </Link>
             <Link to="/customer-care" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 font-bold text-slate-800 hover:bg-slate-50">
               <Headphones size={18} className="text-teal-700" />
